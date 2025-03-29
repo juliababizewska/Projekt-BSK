@@ -177,3 +177,6 @@ cython_debug/
 *.pem
 
 .idea
+
+# Ingnoring pdf file used for testing purpose
+signed_document.pdf
