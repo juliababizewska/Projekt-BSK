@@ -1,4 +1,6 @@
 import hashlib
+import tkinter as tk
+from tkinter import filedialog
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -94,9 +96,69 @@ def verify_pdf(signed_pdf_path, public_key_path):
 
 # Test: podpisujemy dokument
 
-pin = getpass("Podaj PIN").encode()
+# pin = getpass("Podaj PIN").encode()
+#
+# key = hashlib.sha256(pin).digest()
+#
+# sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
 
-key = hashlib.sha256(pin).digest()
 
-sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
-#verify_pdf("signed_document.pdf", "public_key.pem")
+
+def gui():
+    root = tk.Tk()
+    root.title("PDF Signer")
+    root.geometry("400x300")
+
+    def select_pdf():
+        pdf_path.set(filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")]))
+
+    def select_key():
+        key_path.set(filedialog.askopenfilename(filetypes=[("PEM files", "*.pem")]))
+
+    def select_output():
+        output_path.set(filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")]))
+
+    def sign():
+        pin = hashlib.sha256(pin_entry.get().encode()).digest()
+
+        # Nowe okno z wynikiem podpisywania
+        result_window = tk.Toplevel(root)
+        result_window.title("Wynik podpisu")
+        result_window.geometry("500x100")
+
+        try:
+            sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin)
+            msg = f"Dokument '{pdf_path.get()}' został podpisany."
+            tk.Label(result_window, text=msg, fg="green").pack(pady=20)
+        except Exception as e:
+            msg = f"Błąd: {e}"
+            tk.Label(result_window, text=msg, fg="red").pack(pady=20)
+
+        tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
+
+    pdf_path = tk.StringVar()
+    key_path = tk.StringVar()
+    output_path = tk.StringVar()
+
+    tk.Label(root, text="PDF File:").pack()
+    tk.Entry(root, textvariable=pdf_path).pack()
+    tk.Button(root, text="Select PDF", command=select_pdf).pack()
+
+    tk.Label(root, text="Private Key:").pack()
+    tk.Entry(root, textvariable=key_path).pack()
+    tk.Button(root, text="Select Key", command=select_key).pack()
+
+    tk.Label(root, text="Output Path:").pack()
+    tk.Entry(root, textvariable=output_path).pack()
+    tk.Button(root, text="Select Output Path", command=select_output).pack()
+
+    tk.Label(root, text="PIN:").pack()
+    pin_entry = tk.Entry(root, show="*")
+    pin_entry.pack()
+
+    tk.Button(root, text="Sign PDF", command=sign).pack(pady=10)
+
+    root.mainloop()
+
+
+gui()
