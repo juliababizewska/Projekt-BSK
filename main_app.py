@@ -1,6 +1,6 @@
 import hashlib
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -23,19 +23,24 @@ def create_hash(pdf_path):
     return pdf_hash
 
 def sign_pdf(pdf_path, private_key_path, output_path, key):
+    # Wczytanie dokumentu PDF
+    with open(pdf_path, "rb") as f:
+        pdf_data = f.read()
+
+    # Hashowanie dokumentu
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(pdf_data)
+    pdf_hash = digest.finalize()
 
     # Wczytanie klucza prywatnego
     with open(private_key_path, "rb") as f:
 
         try:
             private_key = serialization.load_pem_private_key(f.read(), password=key)
-        except:
-            print("Podano nieprawidłowy PIN")
-            return
+        except ValueError:
+            messagebox.showerror("Błąd", "Niepoprawny PIN!")
+            return False
 
-    pdf_hash = create_hash(pdf_path)
-
-    # Podpisanie dokumentu (RSA-4096)
     signature = private_key.sign(
         pdf_hash,
         padding.PSS(
@@ -59,6 +64,7 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
         writer.write(f)
 
     print(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
+    return True
 
 
 def verify_pdf(signed_pdf_path, public_key_path):
@@ -96,11 +102,14 @@ def verify_pdf(signed_pdf_path, public_key_path):
 
 # Test: podpisujemy dokument
 
-# pin = getpass("Podaj PIN").encode()
-#
-# key = hashlib.sha256(pin).digest()
-#
-# sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
+    # Test: podpisujemy dokument
+
+
+    # pin = getpass("Podaj PIN").encode()
+    #
+    # key = hashlib.sha256(pin).digest()
+    #
+    # sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
 
 
 
@@ -122,19 +131,18 @@ def gui():
         pin = hashlib.sha256(pin_entry.get().encode()).digest()
 
         # Nowe okno z wynikiem podpisywania
-        result_window = tk.Toplevel(root)
-        result_window.title("Wynik podpisu")
-        result_window.geometry("500x100")
 
         try:
-            sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin)
-            msg = f"Dokument '{pdf_path.get()}' został podpisany."
-            tk.Label(result_window, text=msg, fg="green").pack(pady=20)
+            if sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin):
+                msg = f"Dokument '{pdf_path.get()}' został podpisany."
+                result_window = tk.Toplevel(root)
+                result_window.title("Wynik podpisu")
+                result_window.geometry("500x100")
+
+                tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
+                tk.Label(result_window, text=msg, fg="green").pack(pady=20)
         except Exception as e:
             msg = f"Błąd: {e}"
-            tk.Label(result_window, text=msg, fg="red").pack(pady=20)
-
-        tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
 
     pdf_path = tk.StringVar()
     key_path = tk.StringVar()
