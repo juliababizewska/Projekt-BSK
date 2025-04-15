@@ -46,7 +46,7 @@ def gui():
             public_key = private_key.public_key()
 
             # Zapis klucza prywatnego
-            with open("private_key.pem", "wb") as f:
+            with open(private_key_path.get(), "wb") as f:
                 f.write(private_key.private_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PrivateFormat.PKCS8,
@@ -54,7 +54,7 @@ def gui():
                 ))
 
             # Zapis klucza publicznego
-            with open("public_key.pem", "wb") as f:
+            with open(public_key_path.get(), "wb") as f:
                 f.write(public_key.public_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PublicFormat.SubjectPublicKeyInfo

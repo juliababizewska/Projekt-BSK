@@ -1,14 +1,40 @@
 import hashlib
 import tkinter as tk
-from tkinter import filedialog, messagebox
-
+import platform
+from tkinter import filedialog, messagebox, ttk
+import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
 from pypdf import PdfReader, PdfWriter
 
-from getpass import getpass
+def main_menu():
+    root = tk.Tk()
+    root.title("PDF App")
+    root.geometry("300x200")
 
+    tk.Label(root, text="What do you want to do", font=("Arial", 14)).pack(pady=20)
+
+    tk.Button(root, text="Sign PDF", command=lambda: [root.destroy(), gui_sign()]).pack(pady=10)
+    tk.Button(root, text="Verify PDF", command=lambda: [root.destroy(), verify_gui()]).pack(pady=10)
+
+    root.mainloop()
+
+def find_pem_files_on_external_drives():
+    found = []
+    system = platform.system()
+
+    if system == "Windows":
+        # Sprawdź litery od D: do Z: (bo A: i C: to zazwyczaj dyski wewnętrzne)
+        for drive in map(chr, range(68, 91)):  # D-Z
+            path = f"{drive}:/"
+            if os.path.exists(path):
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        if file.endswith(".pem"):
+                            found.append(os.path.join(root, file))
+
+    return found
 
 def create_hash(pdf_path):
     # Wczytanie dokumentu PDF
@@ -110,14 +136,50 @@ def verify_pdf(signed_pdf_path, public_key_path):
     # key = hashlib.sha256(pin).digest()
     #
     # sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
+def verify_gui():
+    root = tk.Tk()
+    root.title("PDF Verifier")
+    root.geometry("500x250")
 
+    signed_pdf_path = tk.StringVar()
+    public_key_path = tk.StringVar()
 
+    def exit_to_menu():
+        root.destroy()
+        main_menu()
+    def select_pdf():
+        signed_pdf_path.set(filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")]))
 
-def gui():
+    def select_public_key():
+        public_key_path.set(filedialog.askopenfilename(filetypes=[("PEM files", "*.pem")]))
+
+    def verify():
+        try:
+            verify_pdf(signed_pdf_path.get(), public_key_path.get())
+            messagebox.showinfo("Sukces", "Podpis poprawny! Dokument nie został zmodyfikowany.")
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Nie udało się zweryfikować: {e}")
+
+    tk.Label(root, text="Podpisany PDF:").pack()
+    tk.Entry(root, textvariable=signed_pdf_path).pack()
+    tk.Button(root, text="Wybierz PDF", command=select_pdf).pack()
+
+    tk.Label(root, text="Klucz publiczny (.pem):").pack()
+    tk.Entry(root, textvariable=public_key_path).pack()
+    tk.Button(root, text="Wybierz Public Key", command=select_public_key).pack()
+
+    tk.Button(root, text="Zweryfikuj", command=verify).pack(pady=20)
+    tk.Button(root, text="Wyjdź", command=exit_to_menu).pack()
+
+    root.mainloop()
+
+def gui_sign():
     root = tk.Tk()
     root.title("PDF Signer")
-    root.geometry("400x300")
-
+    root.geometry("500x300")
+    def exit_to_menu():
+        root.destroy()
+        main_menu()
     def select_pdf():
         pdf_path.set(filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")]))
 
@@ -134,27 +196,43 @@ def gui():
 
         try:
             if sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin):
-                msg = f"Dokument '{pdf_path.get()}' został podpisany."
-                result_window = tk.Toplevel(root)
-                result_window.title("Wynik podpisu")
-                result_window.geometry("500x100")
+                # msg = f"Dokument '{pdf_path.get()}' został podpisany."
+                # result_window = tk.Toplevel(root)
+                # result_window.title("Wynik podpisu")
+                # result_window.geometry("500x100")
+                #
+                messagebox.showinfo("Succes", "The PDF file has been signed succesfully")
 
-                tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
-                tk.Label(result_window, text=msg, fg="green").pack(pady=20)
+                # tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
+                # tk.Label(result_window, text=msg, fg="green").pack(pady=20)
         except Exception as e:
             msg = f"Błąd: {e}"
 
     pdf_path = tk.StringVar()
     key_path = tk.StringVar()
+    public_key_path = tk.StringVar()
     output_path = tk.StringVar()
 
     tk.Label(root, text="PDF File:").pack()
     tk.Entry(root, textvariable=pdf_path).pack()
     tk.Button(root, text="Select PDF", command=select_pdf).pack()
 
-    tk.Label(root, text="Private Key:").pack()
-    tk.Entry(root, textvariable=key_path).pack()
-    tk.Button(root, text="Select Key", command=select_key).pack()
+    #znajdowanie plików .pem na dysku zewnętrznym
+
+    tk.Label(root, text="Private Key (.pem):").pack()
+
+    def update_selected_key(event):
+        key_path.set(key_dropdown_var.get())
+
+    pem_files = find_pem_files_on_external_drives()
+    if not pem_files:
+        pem_files = ["(brak znalezionych .pem)"]
+
+    key_dropdown_var = tk.StringVar()
+    key_dropdown = ttk.Combobox(root, textvariable=key_dropdown_var, values=pem_files, width=50)
+    key_dropdown.bind("<<ComboboxSelected>>", update_selected_key)
+    key_dropdown.pack(pady=5)
+
 
     tk.Label(root, text="Output Path:").pack()
     tk.Entry(root, textvariable=output_path).pack()
@@ -164,9 +242,13 @@ def gui():
     pin_entry = tk.Entry(root, show="*")
     pin_entry.pack()
 
-    tk.Button(root, text="Sign PDF", command=sign).pack(pady=10)
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=20)
 
+    tk.Button(button_frame, text="Sign PDF", command=sign).pack(side="left", padx=10)
+    tk.Button(button_frame, text="Wyjdź", command=exit_to_menu).pack(side="left", padx=10)
     root.mainloop()
 
 
-gui()
+if __name__ == "__main__":
+    main_menu()
