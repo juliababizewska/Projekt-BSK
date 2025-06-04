@@ -7,8 +7,10 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
 from pypdf import PdfReader, PdfWriter
-import tempfile
+import win32api, win32file
 
+
+# Funkcja do tworzenia hasha zawartości PDF
 def create_pdf_content_hash(pdf_path):
     reader = PdfReader(pdf_path)
     digest = hashes.Hash(hashes.SHA256())
@@ -18,7 +20,7 @@ def create_pdf_content_hash(pdf_path):
         digest.update(page_bytes)
     return digest.finalize()
 
-
+# Funkcja do wyświetlenia głównego menu
 def main_menu():
     root = tk.Tk()
     root.title("PDF App")
@@ -28,9 +30,10 @@ def main_menu():
 
     tk.Button(root, text="Sign PDF", command=lambda: [root.destroy(), gui_sign()]).pack(pady=10)
     tk.Button(root, text="Verify PDF", command=lambda: [root.destroy(), verify_gui()]).pack(pady=10)
-
+    tk.Button(root, text="Exit", command=root.quit).pack(pady=10)
     root.mainloop()
 
+# Funkcja do znajdowania plików .pem w bieżącym folderze
 def find_pem_files_in_current_folder():
     """Find all .pem files in the same folder as this script."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -40,48 +43,44 @@ def find_pem_files_in_current_folder():
             pem_files.append(os.path.join(current_dir, file))
     return pem_files
 
+# Funkcja do znajdowania dysków wymiennych w systemie Windows
+def get_removable_drives():
+    drives = win32api.GetLogicalDriveStrings().split('\000')[:-1]
+    removable_drives = []
+    for drive in drives:
+        drive_type = win32file.GetDriveType(drive)
+        if drive_type == win32file.DRIVE_REMOVABLE:
+            removable_drives.append(drive)
+    return removable_drives
+
+# Funkcja do znajdowania plików .pem na zewnętrznych dyskach
 def find_pem_files_on_external_drives():
     found = []
     system = platform.system()
-
-    if system == "Windows":
-        try:
-            import win32api
-            drives = win32api.GetLogicalDriveStrings().split('\000')[:-1]
-        except ImportError:
-            messagebox.showerror("Błąd", "Biblioteka win32api nie jest zainstalowana. Zainstaluj ją za pomocą 'pip install pywin32'.")
-            return []
-    else:
-        mount_points = ["/media", "/mnt"]
-        for mount_point in mount_points:
-            if os.path.exists(mount_point):
-                for root, _, files in os.walk(mount_point):
+    try:
+        drives = get_removable_drives()
+        for drive in drives:
+            if drive == "C:\\": # Pomijamy dysk C, bo przeglądamy tylko zewnętrzne dyski
+                continue
+            try:
+                for root, _, files in os.walk(drive):
                     for file in files:
                         if file.lower().endswith(".pem"):
                             found.append(os.path.join(root, file))
+            except Exception:
+                messagebox.showerror(f"Nie można przeszukać dysku {drive}. Możliwe, że jest to dysk sieciowy lub nie jest dostępny.")
+    except ImportError:
+        messagebox.showerror("Błąd", "Biblioteka win32api nie jest zainstalowana. Zainstaluj ją za pomocą 'pip install pywin32'.")
+        return []
     return found
 
-def create_hash(pdf_path):
-    # Wczytanie dokumentu PDF
-    with open(pdf_path, "rb") as f:
-        pdf_data = f.read()
 
-    # Hashowanie dokumentu
-    digest = hashes.Hash(hashes.SHA256())
-    digest.update(pdf_data)
-    pdf_hash = digest.finalize()
-
-    return pdf_hash
-
+# Funkcja do podpisywania PDF
 def sign_pdf(pdf_path, private_key_path, output_path, key):
     # Wczytanie dokumentu PDF
     with open(pdf_path, "rb") as f:
         pdf_data = f.read()
 
-    # Hashowanie dokumentu
-    # digest = hashes.Hash(hashes.SHA256())
-    # digest.update(pdf_data)
-    # pdf_hash = digest.finalize()
     pdf_hash = create_pdf_content_hash(pdf_path)
     # Wczytanie klucza prywatnego
     with open(private_key_path, "rb") as f:
@@ -114,12 +113,11 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
     with open(output_path, "wb") as f:
         writer.write(f)
 
-    print(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
-    print("HASH (sign):", pdf_hash.hex())
-    print("SIGNATURE (sign):", signature.hex())
+    messagebox.showinfo(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
+
     return True
 
-
+# Funkcja do weryfikacji podpisu PDF
 def verify_pdf(signed_pdf_path, public_key_path):
     reader = PdfReader(signed_pdf_path)
 
@@ -134,8 +132,6 @@ def verify_pdf(signed_pdf_path, public_key_path):
 
     with open(public_key_path, "rb") as f:
         public_key = serialization.load_pem_public_key(f.read())
-    print("HASH (verify):", pdf_hash.hex())
-    print("SIGNATURE (verify):", signature.hex())
     try:
         public_key.verify(
             signature,
@@ -146,22 +142,10 @@ def verify_pdf(signed_pdf_path, public_key_path):
             ),
             hashes.SHA256()
         )
-        print("Podpis jest poprawny! Dokument nie został zmieniony.")
     except Exception as e:
-        print("Podpis niepoprawny! Dokument mógł zostać zmodyfikowany.")
         raise e
 
-
-# Test: podpisujemy dokument
-
-    # Test: podpisujemy dokument
-
-
-    # pin = getpass("Podaj PIN").encode()
-    #
-    # key = hashlib.sha256(pin).digest()
-    #
-    # sign_pdf("Test PDF.pdf", "private_key.pem", "signed_document.pdf", key)
+# GUI do weryfikacji podpisu PDF
 def verify_gui():
     root = tk.Tk()
     root.title("PDF Verifier")
@@ -199,6 +183,7 @@ def verify_gui():
 
     root.mainloop()
 
+# GUI do podpisywania PDF
 def gui_sign():
     root = tk.Tk()
     root.title("PDF Signer")
@@ -216,23 +201,31 @@ def gui_sign():
         output_path.set(filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")]))
 
     def sign():
+        if not pdf_path.get():
+            messagebox.showerror("Błąd", "Nie wybrano pliku PDF!")
+            return
+        if not output_path.get():
+            messagebox.showerror("Błąd", "Nie wybrano ścieżki do zapisu!")
+            return
+        if not pin_entry.get():
+            messagebox.showerror("Błąd", "PIN nie może być pusty!")
+            return
         pin = hashlib.sha256(pin_entry.get().encode()).digest()
-
-        # Nowe okno z wynikiem podpisywania
-
         try:
             if sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin):
-                # msg = f"Dokument '{pdf_path.get()}' został podpisany."
-                # result_window = tk.Toplevel(root)
-                # result_window.title("Wynik podpisu")
-                # result_window.geometry("500x100")
-                #
-                messagebox.showinfo("Succes", "The PDF file has been signed succesfully")
-
-                # tk.Button(result_window, text="Zamknij", command=result_window.destroy).pack(pady=5)
-                # tk.Label(result_window, text=msg, fg="green").pack(pady=20)
+                messagebox.showinfo("Sukces", "Plik PDF został poprawnie podpisany.")
         except Exception as e:
-            msg = f"Błąd: {e}"
+            messagebox.showerror("Błąd", f"Nie udało się podpisać: {e}")
+
+    # Funkcja do odświeżania listy plików .pem z dysków zewnętrznych
+    def refresh_pem_files():
+        pem_files = find_pem_files_on_external_drives()
+        if not pem_files:
+            pem_files = ["(brak znalezionych .pem)"]
+            messagebox.showwarning("Uwaga", "Nie znaleziono żadnych plików .pem na dyskach zewnętrznych.")
+        key_dropdown['values'] = pem_files
+        key_dropdown_var.set(pem_files[0])
+
 
     pdf_path = tk.StringVar()
     key_path = tk.StringVar()
@@ -254,10 +247,19 @@ def gui_sign():
     if not pem_files:
         pem_files = ["(brak znalezionych .pem)"]
 
+    pem_frame = tk.Frame(root)
+    pem_frame.pack(pady=5)
+
     key_dropdown_var = tk.StringVar()
-    key_dropdown = ttk.Combobox(root, textvariable=key_dropdown_var, values=pem_files, width=50)
+    key_dropdown = ttk.Combobox(pem_frame, textvariable=key_dropdown_var, values=pem_files, width=50)
     key_dropdown.bind("<<ComboboxSelected>>", update_selected_key)
-    key_dropdown.pack(pady=5)
+    key_dropdown.pack(side="left", padx=5)
+
+    tk.Button(pem_frame, text="Refresh", command=refresh_pem_files).pack(side="left", padx=5)
+
+
+    # Initialize dropdown with empty or default value
+    # refresh_pem_files()
 
 
     tk.Label(root, text="Output Path:").pack()
