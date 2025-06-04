@@ -7,6 +7,17 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
 from pypdf import PdfReader, PdfWriter
+import tempfile
+
+def create_pdf_content_hash(pdf_path):
+    reader = PdfReader(pdf_path)
+    digest = hashes.Hash(hashes.SHA256())
+    for page in reader.pages:
+        # Get the raw bytes of the page object
+        page_bytes = page.get_contents().get_data()
+        digest.update(page_bytes)
+    return digest.finalize()
+
 
 def main_menu():
     root = tk.Tk()
@@ -20,20 +31,34 @@ def main_menu():
 
     root.mainloop()
 
+def find_pem_files_in_current_folder():
+    """Find all .pem files in the same folder as this script."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    pem_files = []
+    for file in os.listdir(current_dir):
+        if file.lower().endswith(".pem"):
+            pem_files.append(os.path.join(current_dir, file))
+    return pem_files
+
 def find_pem_files_on_external_drives():
     found = []
     system = platform.system()
 
     if system == "Windows":
-        # Sprawdź litery od D: do Z: (bo A: i C: to zazwyczaj dyski wewnętrzne)
-        for drive in map(chr, range(68, 91)):  # D-Z
-            path = f"{drive}:/"
-            if os.path.exists(path):
-                for root, _, files in os.walk(path):
+        try:
+            import win32api
+            drives = win32api.GetLogicalDriveStrings().split('\000')[:-1]
+        except ImportError:
+            messagebox.showerror("Błąd", "Biblioteka win32api nie jest zainstalowana. Zainstaluj ją za pomocą 'pip install pywin32'.")
+            return []
+    else:
+        mount_points = ["/media", "/mnt"]
+        for mount_point in mount_points:
+            if os.path.exists(mount_point):
+                for root, _, files in os.walk(mount_point):
                     for file in files:
-                        if file.endswith(".pem"):
+                        if file.lower().endswith(".pem"):
                             found.append(os.path.join(root, file))
-
     return found
 
 def create_hash(pdf_path):
@@ -54,10 +79,10 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
         pdf_data = f.read()
 
     # Hashowanie dokumentu
-    digest = hashes.Hash(hashes.SHA256())
-    digest.update(pdf_data)
-    pdf_hash = digest.finalize()
-
+    # digest = hashes.Hash(hashes.SHA256())
+    # digest.update(pdf_data)
+    # pdf_hash = digest.finalize()
+    pdf_hash = create_pdf_content_hash(pdf_path)
     # Wczytanie klucza prywatnego
     with open(private_key_path, "rb") as f:
 
@@ -90,30 +115,31 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
         writer.write(f)
 
     print(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
+    print("HASH (sign):", pdf_hash.hex())
+    print("SIGNATURE (sign):", signature.hex())
     return True
 
 
 def verify_pdf(signed_pdf_path, public_key_path):
-
     reader = PdfReader(signed_pdf_path)
-    writer = PdfWriter()
 
     # Pobieranie podpisu z pliku PDF
     signature_hex = reader.metadata.get("/Signature")
+    if not signature_hex:
+        raise ValueError("Dokument PDF nie zawiera podpisu.")
     signature = bytes.fromhex(signature_hex)
 
-    # TODO Usuwanie podpisu z metadanych
-
-
-    signed_pdf_hash = create_hash(signed_pdf_path)
+    # Hash the page content of the signed PDF (ignore metadata)
+    pdf_hash = create_pdf_content_hash(signed_pdf_path)
 
     with open(public_key_path, "rb") as f:
         public_key = serialization.load_pem_public_key(f.read())
-
+    print("HASH (verify):", pdf_hash.hex())
+    print("SIGNATURE (verify):", signature.hex())
     try:
         public_key.verify(
-            signature,  # Podpis pobrany z dokumentu PDF
-            signed_pdf_hash,  # Hash obliczony z dokumentu przez użytkownika B
+            signature,
+            pdf_hash,
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
                 salt_length=padding.PSS.MAX_LENGTH
@@ -121,9 +147,9 @@ def verify_pdf(signed_pdf_path, public_key_path):
             hashes.SHA256()
         )
         print("Podpis jest poprawny! Dokument nie został zmieniony.")
-    except:
+    except Exception as e:
         print("Podpis niepoprawny! Dokument mógł zostać zmodyfikowany.")
-
+        raise e
 
 
 # Test: podpisujemy dokument
