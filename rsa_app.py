@@ -7,9 +7,6 @@ from cryptography.hazmat.primitives import serialization
 
 def gui():
 
-    #Pobranie PIN-u od użytkownika
-    #  pin = getpass("Podaj PIN:").encode()
-
     #Hashowanie PIN-u
     root = tk.Tk()
     root.geometry('500x500')

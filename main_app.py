@@ -68,9 +68,9 @@ def find_pem_files_on_external_drives():
                         if file.lower().endswith(".pem"):
                             found.append(os.path.join(root, file))
             except Exception:
-                messagebox.showerror(f"Nie można przeszukać dysku {drive}. Możliwe, że jest to dysk sieciowy lub nie jest dostępny.")
+                messagebox.showerror(f"Unable to search {drive}. This drive might be unavailable.")
     except ImportError:
-        messagebox.showerror("Błąd", "Biblioteka win32api nie jest zainstalowana. Zainstaluj ją za pomocą 'pip install pywin32'.")
+        messagebox.showerror("Error", "win32api is not installed. Try installing it with 'pip install pywin32'.")
         return []
     return found
 
@@ -88,7 +88,7 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
         try:
             private_key = serialization.load_pem_private_key(f.read(), password=key)
         except ValueError:
-            messagebox.showerror("Błąd", "Niepoprawny PIN!")
+            messagebox.showerror("Error!", "PIN incorrect!")
             return False
 
     signature = private_key.sign(
@@ -113,7 +113,7 @@ def sign_pdf(pdf_path, private_key_path, output_path, key):
     with open(output_path, "wb") as f:
         writer.write(f)
 
-    messagebox.showinfo(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
+    #messagebox.showinfo(f"Dokument '{pdf_path}' został podpisany i zapisany jako '{output_path}'.")
 
     return True
 
@@ -124,7 +124,7 @@ def verify_pdf(signed_pdf_path, public_key_path):
     # Pobieranie podpisu z pliku PDF
     signature_hex = reader.metadata.get("/Signature")
     if not signature_hex:
-        raise ValueError("Dokument PDF nie zawiera podpisu.")
+        raise ValueError("Selected PDF is not signed!")
     signature = bytes.fromhex(signature_hex)
 
     # Hash the page content of the signed PDF (ignore metadata)
@@ -166,20 +166,20 @@ def verify_gui():
     def verify():
         try:
             verify_pdf(signed_pdf_path.get(), public_key_path.get())
-            messagebox.showinfo("Sukces", "Podpis poprawny! Dokument nie został zmodyfikowany.")
+            messagebox.showinfo("Success", "Signature correct! Document has not been modified.")
         except Exception as e:
-            messagebox.showerror("Błąd", f"Nie udało się zweryfikować: {e}")
+            messagebox.showerror("Error", f"Signature incorrect: {e}")
 
-    tk.Label(root, text="Podpisany PDF:").pack()
+    tk.Label(root, text="Signed PDF:").pack()
     tk.Entry(root, textvariable=signed_pdf_path).pack()
-    tk.Button(root, text="Wybierz PDF", command=select_pdf).pack()
+    tk.Button(root, text="Choose PDF", command=select_pdf).pack()
 
-    tk.Label(root, text="Klucz publiczny (.pem):").pack()
+    tk.Label(root, text="Public key (.pem):").pack()
     tk.Entry(root, textvariable=public_key_path).pack()
-    tk.Button(root, text="Wybierz Public Key", command=select_public_key).pack()
+    tk.Button(root, text="Choose public key", command=select_public_key).pack()
 
-    tk.Button(root, text="Zweryfikuj", command=verify).pack(pady=20)
-    tk.Button(root, text="Wyjdź", command=exit_to_menu).pack()
+    tk.Button(root, text="Verify", command=verify).pack(pady=20)
+    tk.Button(root, text="Exit", command=exit_to_menu).pack()
 
     root.mainloop()
 
@@ -202,29 +202,29 @@ def gui_sign():
 
     def sign():
         if not pdf_path.get():
-            messagebox.showerror("Błąd", "Nie wybrano pliku PDF!")
+            messagebox.showerror("Error", "Choose correct PDF file!")
             return
         if not output_path.get():
-            messagebox.showerror("Błąd", "Nie wybrano ścieżki do zapisu!")
+            messagebox.showerror("Error", "Choose correct output path!")
             return
         if not pin_entry.get():
-            messagebox.showerror("Błąd", "PIN nie może być pusty!")
+            messagebox.showerror("Error", "PIN should not be empty!")
             return
         pin = hashlib.sha256(pin_entry.get().encode()).digest()
         try:
             if sign_pdf(pdf_path.get(), key_path.get(), output_path.get(), pin):
-                messagebox.showinfo("Sukces", "Plik PDF został poprawnie podpisany.")
+                messagebox.showinfo("Success", "PDF has been signed correctly.")
         except Exception as e:
-            messagebox.showerror("Błąd", f"Nie udało się podpisać: {e}")
+            messagebox.showerror("Error", f"Unable to sign: {e}")
 
     # Funkcja do odświeżania listy plików .pem z dysków zewnętrznych
     def refresh_pem_files():
         pem_files = find_pem_files_on_external_drives()
         if not pem_files:
-            pem_files = ["(brak znalezionych .pem)"]
-            messagebox.showwarning("Uwaga", "Nie znaleziono żadnych plików .pem na dyskach zewnętrznych.")
+            pem_files = ["(no .pem files found)"]
+            messagebox.showwarning("Warning", "No .pem files found on any external drive!")
         key_dropdown['values'] = pem_files
-        key_dropdown_var.set(pem_files[0])
+        #key_dropdown_var.set(pem_files[0])
 
 
     pdf_path = tk.StringVar()
@@ -245,7 +245,7 @@ def gui_sign():
 
     pem_files = find_pem_files_on_external_drives()
     if not pem_files:
-        pem_files = ["(brak znalezionych .pem)"]
+        pem_files = ["(no .pem files found)"]
 
     pem_frame = tk.Frame(root)
     pem_frame.pack(pady=5)
@@ -274,7 +274,7 @@ def gui_sign():
     button_frame.pack(pady=20)
 
     tk.Button(button_frame, text="Sign PDF", command=sign).pack(side="left", padx=10)
-    tk.Button(button_frame, text="Wyjdź", command=exit_to_menu).pack(side="left", padx=10)
+    tk.Button(button_frame, text="Exit", command=exit_to_menu).pack(side="left", padx=10)
     root.mainloop()
 
 
